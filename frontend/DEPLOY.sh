@@ -1,0 +1,21 @@
+#!/bin/bash
+# Quick deployment script for Vercel
+
+echo "🚀 YouTube Downloader - Vercel Deployment"
+echo "========================================"
+echo ""
+echo "Step 1: Install Vercel CLI (if needed)"
+echo "npm i -g vercel"
+echo ""
+echo "Step 2: Login to Vercel"
+echo "vercel login"
+echo ""
+echo "Step 3: Deploy from frontend directory"
+echo "cd frontend"
+echo "vercel"
+echo ""
+echo "Step 4: Set environment variable when prompted"
+echo "REACT_APP_API_URL=https://your-backend-api.com"
+echo ""
+echo "========================================"
+echo "For detailed instructions, see DEPLOYMENT.md"
