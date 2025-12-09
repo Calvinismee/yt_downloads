@@ -1,42 +1,30 @@
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import yt_dlp
 import os
-import io
-from pathlib import Path
-import threading
 import time
+import tempfile
+from pathlib import Path
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Mengizinkan akses dari Frontend manapun
 
-OUTPUT_DIR = "downloads"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# Gunakan folder temporary sistem (C:\Users\...\AppData\Local\Temp di Windows, atau /tmp di Linux)
+OUTPUT_DIR = tempfile.gettempdir()
 
-def cleanup_file(filepath, delay=1):
-    """Delete file after a delay to ensure streaming is complete"""
-    def delete():
-        time.sleep(delay)
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-        except Exception as e:
-            print(f"Cleanup error: {e}")
-    
-    thread = threading.Thread(target=delete, daemon=True)
-    thread.start()
-
-def stream_file(file_obj, chunk_size=1024*1024):
-    """Stream file in chunks"""
-    while True:
-        chunk = file_obj.read(chunk_size)
-        if not chunk:
-            break
-        yield chunk
+@app.route("/", methods=["GET"])
+def home():
+    """Halaman depan untuk cek status server"""
+    return jsonify({
+        "status": "online",
+        "message": "Server YouTube Downloader Berjalan! 🚀",
+        "backend": "Flask + yt-dlp",
+        "version": "1.0.0"
+    })
 
 @app.route("/video-info", methods=["GET"])
 def get_video_info():
-    """Get video metadata (title, thumbnail) without downloading"""
+    """Mendapatkan metadata video (judul, thumbnail) tanpa download"""
     video_id = request.args.get("video_id")
     
     if not video_id:
@@ -48,34 +36,34 @@ def get_video_info():
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "skip_download": True,
-            "socket_timeout": 30,
+            "skip_download": True, # Hanya ambil info
+            "socket_timeout": 15,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
-        # Get highest quality thumbnail
+        # Ambil thumbnail resolusi tertinggi
         thumbnail_url = info.get("thumbnail", "")
         if info.get("thumbnails"):
-            # Use highest quality thumbnail available
             thumbnail_url = max(info["thumbnails"], key=lambda x: x.get("height", 0))["url"]
         
         return jsonify(
             success=True,
             title=info.get("title", "Unknown"),
             duration=info.get("duration", 0),
-            thumbnail=thumbnail_url
+            thumbnail=thumbnail_url,
+            author=info.get("uploader", "Unknown")
         )
     
     except Exception as e:
-        error_msg = str(e)
-        print(f"Video info error: {error_msg}")
-        return jsonify(success=False, error=f"Could not fetch video info: {error_msg}"), 400
+        print(f"Error fetching info: {e}")
+        return jsonify(success=False, error=str(e)), 400
 
 @app.route("/download", methods=["POST"])
 def download_video():
+    """Proses download dan streaming file ke user"""
     data = request.get_json()
     video_id = data.get("video_id")
     title = data.get("title", "video")
@@ -88,109 +76,109 @@ def download_video():
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     
-    # Sanitize title
+    # Bersihkan nama file dari karakter aneh
     safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
     if not safe_title:
-        safe_title = "video"
+        safe_title = "video_download"
     
-    # Download to temporary file
-    temp_filepath = os.path.join(OUTPUT_DIR, f"{safe_title}_temp.%(ext)s")
+    # Template nama file sementara di folder /tmp
+    # %(ext)s akan otomatis diganti oleh yt-dlp (mp4/mp3/webm)
+    temp_filename_template = f"{safe_title}_{int(time.time())}.%(ext)s"
+    temp_filepath = os.path.join(OUTPUT_DIR, temp_filename_template)
     
     try:
+        ydl_opts = {
+            "outtmpl": temp_filepath,
+            "quiet": True,
+            "no_warnings": True,
+            "socket_timeout": 60,
+            "http_headers": {"User-Agent": "Mozilla/5.0"},
+        }
+
+        # Konfigurasi spesifik MP3 vs MP4
         if format_type == "mp3":
-            # MP3: Extract audio with quality
-            ydl_opts = {
+            ydl_opts.update({
                 "format": "bestaudio/best",
-                "outtmpl": temp_filepath,
-                "quiet": False,
-                "no_warnings": False,
-                "socket_timeout": 30,
-                "http_headers": {"User-Agent": "Mozilla/5.0"},
                 "postprocessors": [{
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": "mp3",
                     "preferredquality": str(audio_quality),
-                    "nopostoverwrites": False,
                 }],
-            }
+            })
         else:
-            # MP4: Download with quality selection
+            # Format string untuk kualitas video
             if video_quality == "720":
-                format_str = "best[height<=720]/best[ext=mp4]/best"
+                format_str = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
             elif video_quality == "480":
-                format_str = "best[height<=480]/best[ext=mp4]/best"
+                format_str = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
             elif video_quality == "360":
-                format_str = "best[height<=360]/best[ext=mp4]/best"
-            else:
-                format_str = "best[ext=mp4]/best"
+                format_str = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
+            else: # Best available (1080p+)
+                format_str = "bestvideo+bestaudio/best"
             
-            ydl_opts = {
+            ydl_opts.update({
                 "format": format_str,
-                "outtmpl": temp_filepath,
-                "quiet": False,
-                "no_warnings": False,
-                "socket_timeout": 30,
-                "http_headers": {"User-Agent": "Mozilla/5.0"},
-                "merge_output_format": "mp4",
-            }
+                "merge_output_format": "mp4", # Force jadi MP4
+            })
+
+        print(f"Starting download: {video_id} [{format_type}]")
         
-        # Download the video
-        print(f"Starting download: {video_id} as {format_type}")
+        # Eksekusi Download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        # Find the downloaded file
-        temp_dir = Path(OUTPUT_DIR)
-        downloaded_file = None
-        for file in sorted(temp_dir.glob(f"{safe_title}_temp*"), key=os.path.getctime, reverse=True):
-            if file.suffix in ['.mp3', '.mp4', '.m4a', '.webm']:
-                downloaded_file = file
+        # Cari file hasil download (karena ekstensi bisa berubah-ubah)
+        # Kita cari file yang namanya diawali dengan safe_title dan timestamp tadi
+        search_prefix = f"{safe_title}_{int(time.time())}"
+        found_file = None
+        
+        for file in os.listdir(OUTPUT_DIR):
+            if file.startswith(search_prefix):
+                found_file = os.path.join(OUTPUT_DIR, file)
                 break
         
-        if not downloaded_file:
-            return jsonify(success=False, error="File not found after download"), 500
-        
-        print(f"File found: {downloaded_file}, size: {os.path.getsize(downloaded_file)} bytes")
-        
-        # Read file into memory
-        with open(str(downloaded_file), 'rb') as f:
-            file_data = f.read()
-        
-        if not file_data:
-            return jsonify(success=False, error="Downloaded file is empty"), 500
-        
-        # Create BytesIO object
-        file_obj = io.BytesIO(file_data)
-        
-        # Schedule file cleanup
-        cleanup_file(str(downloaded_file), delay=1)
-        
-        # Send file with streaming
+        if not found_file or not os.path.exists(found_file):
+            return jsonify(success=False, error="File not found after processing"), 500
+
+        print(f"File ready: {found_file} ({os.path.getsize(found_file)} bytes)")
+
+        # --- GENERATOR UNTUK STREAMING (HEMAT RAM) ---
+        def generate_file_stream():
+            try:
+                with open(found_file, "rb") as f:
+                    while True:
+                        chunk = f.read(4096) # Baca 4KB per chunk
+                        if not chunk:
+                            break
+                        yield chunk
+            finally:
+                # Hapus file setelah selesai streaming (Cleanup)
+                try:
+                    os.remove(found_file)
+                    print(f"Cleaned up: {found_file}")
+                except Exception as e:
+                    print(f"Cleanup failed: {e}")
+
+        # Tentukan nama file akhir untuk user
         final_filename = f"{safe_title}.{format_type}"
         mimetype = 'audio/mpeg' if format_type == 'mp3' else 'video/mp4'
-        
-        print(f"Sending file: {final_filename}, size: {len(file_data)} bytes")
-        
-        # Use Response with streaming to enable progress tracking
-        response = Response(
-            stream_file(file_obj),
+
+        return Response(
+            generate_file_stream(),
             mimetype=mimetype,
             headers={
-                'Content-Length': len(file_data),
-                'Content-Disposition': f'attachment; filename="{final_filename}"'
+                "Content-Disposition": f'attachment; filename="{final_filename}"',
+                # "Content-Length": os.path.getsize(found_file) # Opsional, kadang bikin streaming putus di browser tertentu
             }
         )
-        return response
-    
+
     except Exception as e:
-        error_msg = str(e)
-        print(f"Download error: {error_msg}")
+        print(f"Download Error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify(success=False, error=f"Download failed: {error_msg}"), 500
+        return jsonify(success=False, error=str(e)), 500
 
 if __name__ == "__main__":
-    # Get PORT from environment variable (Cloud Run sets this)
-    # Default to 5000 for local testing
+    # Konfigurasi Port untuk Cloud Run
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
