@@ -21,7 +21,7 @@ function App() {
   const [videoInfo, setVideoInfo] = useState(null);
   const [step, setStep] = useState('url'); // 'url' or 'download'
 
-  const API_URL = process.env.REACT_APP_API_URL;
+  const REACT_APP_API_URL = process.env.REACT_APP_API_URL;
 
   const extractVideoId = (url) => {
     const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -31,7 +31,7 @@ function App() {
 
   const handleUrlSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!videoUrl.trim()) {
       setMessage('Please enter a YouTube URL');
       setMessageType('error');
@@ -50,7 +50,7 @@ function App() {
     setMessage('');
 
     try {
-      const response = await axios.get(`${API_URL}/video-info?video_id=${videoId}`);
+      const response = await axios.get(`${REACT_APP_API_URL}/video-info?video_id=${videoId}`);
       if (response.data.success) {
         setVideoInfo(response.data);
         setTitle(response.data.title);
@@ -71,7 +71,7 @@ function App() {
 
   const handleDownload = async (e) => {
     e.preventDefault();
-    
+
     if (!title.trim()) {
       setMessage('Please enter a filename');
       setMessageType('error');
@@ -87,7 +87,7 @@ function App() {
 
     try {
       const videoId = extractVideoId(videoUrl);
-      
+
       // Simulate progress during processing phase
       const progressInterval = setInterval(() => {
         setProgress(prev => {
@@ -95,8 +95,8 @@ function App() {
           return prev;
         });
       }, 300);
-      
-      const response = await axios.post(`${API_URL}/download`, {
+
+      const response = await axios.post(`${REACT_APP_API_URL}/download`, {
         video_id: videoId,
         title: title.trim(),
         format: format,
@@ -107,19 +107,19 @@ function App() {
         responseType: 'blob',
         onDownloadProgress: (progressEvent) => {
           clearInterval(progressInterval);
-          
+
           const downloaded = progressEvent.loaded;
           const total = progressEvent.total || 0;
-          
+
           setDownloadedBytes(downloaded);
           setTotalBytes(total);
-          
+
           if (total) {
             // Map download progress from 30% to 99%
             const downloadPercent = Math.round((downloaded * 100) / total);
             const mappedPercent = Math.floor(30 + (downloadPercent * 0.69));
             setProgress(Math.min(mappedPercent, 99));
-            
+
             if (downloadPercent < 50) {
               setProgressMessage('Downloading...');
             } else {
@@ -131,7 +131,7 @@ function App() {
 
       clearInterval(progressInterval);
       setProgress(100);
-      
+
       // Create a blob URL and trigger download
       const blob = new Blob([response.data], {
         type: format === 'mp3' ? 'audio/mpeg' : 'video/mp4'
@@ -144,10 +144,10 @@ function App() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
       setMessage(`Download complete! File: ${title.trim()}.${format}`);
       setMessageType('success');
-      
+
       // Reset after a delay
       setTimeout(() => {
         setProgress(0);
@@ -202,156 +202,156 @@ function App() {
         />
       </div>
       <div className="container">
-      <div className="card">
-        <div className="header">
-          <h1><DecryptedText text="Ambatudonlod" animateOn="both" revealDirection="start" /></h1>
-          <p>Download videos as MP4 or extract audio as MP3</p>
-        </div>
+        <div className="card">
+          <div className="header">
+            <h1><DecryptedText text="Ambatudonlod" animateOn="both" revealDirection="start" /></h1>
+            <p>Download videos as MP4 or extract audio as MP3</p>
+          </div>
 
-        {step === 'url' && (
-          <form onSubmit={handleUrlSubmit} className="form">
-            <div className="form-group">
-              <label htmlFor="url">YouTube URL</label>
-              <input
-                id="url"
-                type="text"
-                placeholder="https://www.youtube.com/watch?v=..."
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                disabled={processing}
-              />
-            </div>
+          {step === 'url' && (
+            <form onSubmit={handleUrlSubmit} className="form">
+              <div className="form-group">
+                <label htmlFor="url">YouTube URL</label>
+                <input
+                  id="url"
+                  type="text"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  disabled={processing}
+                />
+              </div>
 
-            <button type="submit" className="btn-download" disabled={processing}>
-              {processing ? 'Fetching video...' : 'Next'}
-            </button>
-          </form>
-        )}
+              <button type="submit" className="btn-download" disabled={processing}>
+                {processing ? 'Fetching video...' : 'Next'}
+              </button>
+            </form>
+          )}
 
-        {step === 'download' && videoInfo && (
-          <form onSubmit={handleDownload} className="form">
-            <div className="download-preview-container">
-              <div className="video-preview-card">
-                {videoInfo.thumbnail && (
-                  <img src={videoInfo.thumbnail} alt="Video thumbnail" className="video-thumbnail-large" />
-                )}
-                <div className="video-preview-details">
-                  <h2 className="video-title-large">{videoInfo.title}</h2>
-                  {videoInfo.duration && (
-                    <p className="video-duration-large">
-                      {Math.floor(videoInfo.duration / 60)}:{String(videoInfo.duration % 60).padStart(2, '0')}
-                    </p>
+          {step === 'download' && videoInfo && (
+            <form onSubmit={handleDownload} className="form">
+              <div className="download-preview-container">
+                <div className="video-preview-card">
+                  {videoInfo.thumbnail && (
+                    <img src={videoInfo.thumbnail} alt="Video thumbnail" className="video-thumbnail-large" />
+                  )}
+                  <div className="video-preview-details">
+                    <h2 className="video-title-large">{videoInfo.title}</h2>
+                    {videoInfo.duration && (
+                      <p className="video-duration-large">
+                        {Math.floor(videoInfo.duration / 60)}:{String(videoInfo.duration % 60).padStart(2, '0')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="download-form-section">
+                  <div className="form-group">
+                    <label htmlFor="title">Filename</label>
+                    <input
+                      id="title"
+                      type="text"
+                      placeholder="Enter filename (without extension)"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="format">Format</label>
+                    <div className="format-options">
+                      <label className={`radio-label ${format === 'mp4' ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          value="mp4"
+                          checked={format === 'mp4'}
+                          onChange={(e) => setFormat(e.target.value)}
+                          disabled={loading}
+                        />
+                        MP4 (Video)
+                      </label>
+                      <label className={`radio-label ${format === 'mp3' ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          value="mp3"
+                          checked={format === 'mp3'}
+                          onChange={(e) => setFormat(e.target.value)}
+                          disabled={loading}
+                        />
+                        MP3 (Audio)
+                      </label>
+                    </div>
+                  </div>
+
+                  {format === 'mp4' && (
+                    <div className="form-group">
+                      <label htmlFor="videoQuality">Quality</label>
+                      <select
+                        id="videoQuality"
+                        value={videoQuality}
+                        onChange={(e) => setVideoQuality(e.target.value)}
+                        disabled={loading}
+                        className="quality-select"
+                      >
+                        <option value="720">720p</option>
+                        <option value="480">480p</option>
+                        <option value="360">360p</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {format === 'mp3' && (
+                    <div className="form-group">
+                      <label htmlFor="audioQuality">Quality</label>
+                      <select
+                        id="audioQuality"
+                        value={audioQuality}
+                        onChange={(e) => setAudioQuality(e.target.value)}
+                        disabled={loading}
+                        className="quality-select"
+                      >
+                        <option value="320">320 kb/s</option>
+                        <option value="256">256 kb/s</option>
+                        <option value="192">192 kb/s</option>
+                        <option value="128">128 kb/s</option>
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="download-form-section">
-                <div className="form-group">
-                  <label htmlFor="title">Filename</label>
-                  <input
-                    id="title"
-                    type="text"
-                    placeholder="Enter filename (without extension)"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    disabled={loading}
-                  />
-                </div>
+              <div className="button-group">
+                <button type="button" className="btn-back" onClick={goBack} disabled={loading}>
+                  Back
+                </button>
+                <button type="submit" className="btn-download" disabled={loading}>
+                  {loading ? 'Downloading...' : 'Download'}
+                </button>
+              </div>
+            </form>
+          )}
 
-                <div className="form-group">
-                  <label htmlFor="format">Format</label>
-                  <div className="format-options">
-                    <label className={`radio-label ${format === 'mp4' ? 'selected' : ''}`}>
-                      <input
-                        type="radio"
-                        value="mp4"
-                        checked={format === 'mp4'}
-                        onChange={(e) => setFormat(e.target.value)}
-                        disabled={loading}
-                      />
-                      MP4 (Video)
-                    </label>
-                    <label className={`radio-label ${format === 'mp3' ? 'selected' : ''}`}>
-                      <input
-                        type="radio"
-                        value="mp3"
-                        checked={format === 'mp3'}
-                        onChange={(e) => setFormat(e.target.value)}
-                        disabled={loading}
-                      />
-                      MP3 (Audio)
-                    </label>
-                  </div>
-                </div>
-
-                {format === 'mp4' && (
-                  <div className="form-group">
-                    <label htmlFor="videoQuality">Quality</label>
-                    <select
-                      id="videoQuality"
-                      value={videoQuality}
-                      onChange={(e) => setVideoQuality(e.target.value)}
-                      disabled={loading}
-                      className="quality-select"
-                    >
-                      <option value="720">720p</option>
-                      <option value="480">480p</option>
-                      <option value="360">360p</option>
-                    </select>
-                  </div>
-                )}
-
-                {format === 'mp3' && (
-                  <div className="form-group">
-                    <label htmlFor="audioQuality">Quality</label>
-                    <select
-                      id="audioQuality"
-                      value={audioQuality}
-                      onChange={(e) => setAudioQuality(e.target.value)}
-                      disabled={loading}
-                      className="quality-select"
-                    >
-                      <option value="320">320 kb/s</option>
-                      <option value="256">256 kb/s</option>
-                      <option value="192">192 kb/s</option>
-                      <option value="128">128 kb/s</option>
-                    </select>
-                  </div>
-                )}
+          {loading && (
+            <div className="progress-container">
+              <div className="progress-bar-background">
+                <div
+                  className="progress-bar-fill"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+              <div className="progress-info">
+                <span className="progress-message">{progressMessage}</span>
+                <span className="progress-bytes">{progress}%</span>
               </div>
             </div>
+          )}
 
-            <div className="button-group">
-              <button type="button" className="btn-back" onClick={goBack} disabled={loading}>
-                Back
-              </button>
-              <button type="submit" className="btn-download" disabled={loading}>
-                {loading ? 'Downloading...' : 'Download'}
-              </button>
+          {message && (
+            <div className={`message ${messageType}`}>
+              {message}
             </div>
-          </form>
-        )}
-
-        {loading && (
-          <div className="progress-container">
-            <div className="progress-bar-background">
-              <div 
-                className="progress-bar-fill" 
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-            <div className="progress-info">
-              <span className="progress-message">{progressMessage}</span>
-              <span className="progress-bytes">{progress}%</span>
-            </div>
-          </div>
-        )}
-
-        {message && (
-          <div className={`message ${messageType}`}>
-            {message}
-          </div>
-        )}
+          )}
         </div>
       </div>
     </div>
