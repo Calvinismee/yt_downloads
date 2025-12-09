@@ -21,7 +21,7 @@ function App() {
   const [videoInfo, setVideoInfo] = useState(null);
   const [step, setStep] = useState('url'); // 'url' or 'download'
 
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const API_URL = process.env.REACT_APP_API_URL;
 
   const extractVideoId = (url) => {
     const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
