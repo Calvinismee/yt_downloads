@@ -12,6 +12,10 @@ CORS(app)  # Mengizinkan akses dari Frontend manapun
 # Gunakan folder temporary sistem (C:\Users\...\AppData\Local\Temp di Windows, atau /tmp di Linux)
 OUTPUT_DIR = tempfile.gettempdir()
 
+# [FIX] Tentukan path absolut ke cookies.txt (agar selalu ketemu)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
+
 @app.route("/", methods=["GET"])
 def home():
     """Halaman depan untuk cek status server"""
@@ -46,9 +50,12 @@ def get_video_info():
             "cachedir": False, # Disable cache to avoid permission/stale issues
         }
 
-        # [FIX] Gunakan cookies.txt jika file tersedia untuk bypass bot detection
-        if os.path.exists("cookies.txt"):
-            ydl_opts["cookiefile"] = "cookies.txt"
+        # [FIX] Gunakan path absolut dan print debug log
+        if os.path.exists(COOKIES_FILE):
+            print(f"✅ Cookies found at: {COOKIES_FILE}")
+            ydl_opts["cookiefile"] = COOKIES_FILE
+        else:
+            print(f"❌ Cookies NOT found at: {COOKIES_FILE}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -109,9 +116,12 @@ def download_video():
             "cachedir": False,
         }
 
-        # [FIX] Gunakan cookies.txt jika file tersedia
-        if os.path.exists("cookies.txt"):
-            ydl_opts["cookiefile"] = "cookies.txt"
+        # [FIX] Gunakan path absolut untuk download juga
+        if os.path.exists(COOKIES_FILE):
+            print(f"✅ Cookies found at: {COOKIES_FILE}")
+            ydl_opts["cookiefile"] = COOKIES_FILE
+        else:
+            print(f"❌ Cookies NOT found at: {COOKIES_FILE}")
 
         # Konfigurasi spesifik MP3 vs MP4
         if format_type == "mp3":
