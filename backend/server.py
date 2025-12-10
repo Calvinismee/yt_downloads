@@ -38,7 +38,12 @@ def get_video_info():
             "no_warnings": True,
             "skip_download": True, # Hanya ambil info
             "socket_timeout": 15,
-            "http_headers": {"User-Agent": "Mozilla/5.0"},
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "nocheckcertificate": True,
+            "noplaylist": True,
+            "cachedir": False, # Disable cache to avoid permission/stale issues
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -92,7 +97,12 @@ def download_video():
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 60,
-            "http_headers": {"User-Agent": "Mozilla/5.0"},
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "nocheckcertificate": True,
+            "noplaylist": True,
+            "cachedir": False,
         }
 
         # Konfigurasi spesifik MP3 vs MP4
