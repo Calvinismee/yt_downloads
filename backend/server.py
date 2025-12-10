@@ -45,6 +45,10 @@ def get_video_info():
             "noplaylist": True,
             "cachedir": False, # Disable cache to avoid permission/stale issues
         }
+
+        # [FIX] Gunakan cookies.txt jika file tersedia untuk bypass bot detection
+        if os.path.exists("cookies.txt"):
+            ydl_opts["cookiefile"] = "cookies.txt"
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -104,6 +108,10 @@ def download_video():
             "noplaylist": True,
             "cachedir": False,
         }
+
+        # [FIX] Gunakan cookies.txt jika file tersedia
+        if os.path.exists("cookies.txt"):
+            ydl_opts["cookiefile"] = "cookies.txt"
 
         # Konfigurasi spesifik MP3 vs MP4
         if format_type == "mp3":
