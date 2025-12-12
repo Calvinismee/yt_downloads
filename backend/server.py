@@ -36,6 +36,7 @@ def get_secret(secret_id, version_id="latest"):
 # Load cookies on startup
 def load_cookies():
     """Load cookies from file or Cloud Secret Manager"""
+    # First try local file
     if os.path.exists(COOKIES_FILE):
         print(f"✅ Using local cookies file: {COOKIES_FILE}")
         return COOKIES_FILE
@@ -45,13 +46,17 @@ def load_cookies():
     cookies_data = get_secret("cookies")
     
     if cookies_data:
-        with open(COOKIES_FILE, "w") as f:
-            f.write(cookies_data)
-        print(f"✅ Cookies loaded from Cloud Secret Manager")
-        return COOKIES_FILE
+        try:
+            with open(COOKIES_FILE, "w") as f:
+                f.write(cookies_data)
+            print(f"✅ Cookies loaded from Cloud Secret Manager")
+            return COOKIES_FILE
+        except Exception as e:
+            print(f"❌ Error saving cookies: {e}")
+            return COOKIES_FILE  # Return path anyway, will try to use it
     
-    print("⚠️ No cookies found")
-    return None
+    print("⚠️ No cookies found, continuing without cookies")
+    return COOKIES_FILE  # Still return the path, might exist later
 
 COOKIES_FILE = load_cookies()
 
@@ -89,12 +94,12 @@ def get_video_info():
             "cachedir": False, # Disable cache to avoid permission/stale issues
         }
 
-        # [FIX] Gunakan path absolut dan print debug log
-        if os.path.exists(COOKIES_FILE):
-            print(f"✅ Cookies found at: {COOKIES_FILE}")
+        # Check if cookies exist before using them
+        if COOKIES_FILE and os.path.exists(COOKIES_FILE):
+            print(f"✅ Using cookies: {COOKIES_FILE}")
             ydl_opts["cookiefile"] = COOKIES_FILE
         else:
-            print(f"❌ Cookies NOT found at: {COOKIES_FILE}")
+            print(f"⚠️ Cookies not available, trying without authentication")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
