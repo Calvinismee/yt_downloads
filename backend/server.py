@@ -35,30 +35,37 @@ def get_secret(secret_id, version_id="latest"):
 
 # Load cookies on startup
 def load_cookies():
-    """Load cookies from file or Cloud Secret Manager"""
-    # First try local file
+    """Load cookies from file or environment variable"""
+    print(f"📍 BASE_DIR: {BASE_DIR}")
+    print(f"📍 COOKIES_FILE path: {COOKIES_FILE}")
+    
+    # First try local file (for local development)
     if os.path.exists(COOKIES_FILE):
         print(f"✅ Using local cookies file: {COOKIES_FILE}")
+        with open(COOKIES_FILE, 'r') as f:
+            content = f.read()
+        print(f"✅ Cookies file size: {len(content)} bytes")
         return COOKIES_FILE
     
-    # Try to fetch from Cloud Secret Manager
-    print("🔄 Fetching cookies from Cloud Secret Manager...")
-    cookies_data = get_secret("cookies")
+    # Try to get from environment variable (Cloud Run)
+    cookies_data = os.environ.get("cookies")
+    print(f"📍 Cookies env var: {'Set' if cookies_data else 'Not set'}")
     
     if cookies_data:
         try:
             with open(COOKIES_FILE, "w") as f:
                 f.write(cookies_data)
-            print(f"✅ Cookies loaded from Cloud Secret Manager")
+            print(f"✅ Cookies loaded from environment variable ({len(cookies_data)} bytes)")
             return COOKIES_FILE
         except Exception as e:
             print(f"❌ Error saving cookies: {e}")
-            return COOKIES_FILE  # Return path anyway, will try to use it
+            return COOKIES_FILE
     
-    print("⚠️ No cookies found, continuing without cookies")
-    return COOKIES_FILE  # Still return the path, might exist later
+    print("⚠️ No cookies found")
+    return COOKIES_FILE
 
 COOKIES_FILE = load_cookies()
+print(f"\n🚀 SERVER STARTUP - Cookies file path: {COOKIES_FILE}\n")
 
 @app.route("/", methods=["GET"])
 def home():
