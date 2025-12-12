@@ -5,6 +5,7 @@ import os
 import time
 import tempfile
 from pathlib import Path
+from google.cloud import secretmanager
 
 app = Flask(__name__)
 CORS(app)  # Mengizinkan akses dari Frontend manapun
@@ -15,6 +16,44 @@ OUTPUT_DIR = tempfile.gettempdir()
 # [FIX] Tentukan path absolut ke cookies.txt (agar selalu ketemu)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
+
+# Function to fetch secret from Cloud Secret Manager
+def get_secret(secret_id, version_id="latest"):
+    """Fetch secret from Google Cloud Secret Manager"""
+    try:
+        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project_id:
+            return None
+        
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"❌ Error fetching secret: {e}")
+        return None
+
+# Load cookies on startup
+def load_cookies():
+    """Load cookies from file or Cloud Secret Manager"""
+    if os.path.exists(COOKIES_FILE):
+        print(f"✅ Using local cookies file: {COOKIES_FILE}")
+        return COOKIES_FILE
+    
+    # Try to fetch from Cloud Secret Manager
+    print("🔄 Fetching cookies from Cloud Secret Manager...")
+    cookies_data = get_secret("cookies")
+    
+    if cookies_data:
+        with open(COOKIES_FILE, "w") as f:
+            f.write(cookies_data)
+        print(f"✅ Cookies loaded from Cloud Secret Manager")
+        return COOKIES_FILE
+    
+    print("⚠️ No cookies found")
+    return None
+
+COOKIES_FILE = load_cookies()
 
 @app.route("/", methods=["GET"])
 def home():
