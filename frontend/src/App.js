@@ -204,7 +204,7 @@ function App() {
       <div className="container">
         <div className="card">
           <div className="header">
-            <h1><DecryptedText text="Ambatudonlod" animateOn="both" revealDirection="start" /></h1>
+            <h1><DecryptedText text="Scrape Tube" animateOn="both" revealDirection="start" /></h1>
             <p>Download videos as MP4 or extract audio as MP3</p>
           </div>
 
