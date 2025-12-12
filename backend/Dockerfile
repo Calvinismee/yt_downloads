@@ -1,6 +1,5 @@
 FROM python:3.10-slim
 
-# Install system dependencies
 RUN apt-get update && \
     apt-get install -y ffmpeg git && \
     rm -rf /var/lib/apt/lists/*
@@ -8,10 +7,12 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Copy cookies file (if it exists locally)
+COPY cookies.txt* ./
 
 ENV PORT=8080
 
