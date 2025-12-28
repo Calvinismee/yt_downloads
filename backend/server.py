@@ -8,7 +8,24 @@ from pathlib import Path
 from google.cloud import secretmanager
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(app, resources={r"/*": {
+    "origins": [
+        "https://yt-downloads.vercel.app",  # Domain Frontend Vercel Kamu
+        "http://localhost:3000",            # Localhost React/Nextjs
+        "http://localhost:5173",            # Localhost Vite
+        "*"                                 # Fallback (opsional, hapus jika mau strict)
+    ]
+}})
+
+@app.after_request
+def after_request(response):
+    # Paksa header CORS di setiap response
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 
 # --- KONFIGURASI PATH ---
 
