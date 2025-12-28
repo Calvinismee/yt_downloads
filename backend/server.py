@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+import logging
 import yt_dlp
 import os
 import time
@@ -16,6 +17,22 @@ OUTPUT_DIR = tempfile.gettempdir()
 # [FIX] Tentukan path absolut ke cookies.txt (agar selalu ketemu)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
+
+
+# Setup logging agar output yt-dlp masuk ke Cloud Logging
+class MyLogger(object):
+    def debug(self, msg):
+        # Tangkap pesan auth code di sini
+        if "google.com/device" in msg:
+            print(f"\n🚨 ACTION REQUIRED: {msg} 🚨\n")
+        else:
+            print(msg)
+
+    def warning(self, msg):
+        print(f"WARNING: {msg}")
+
+    def error(self, msg):
+        print(f"ERROR: {msg}")
 
 
 # Function to fetch secret from Cloud Secret Manager
@@ -98,25 +115,17 @@ def get_video_info():
 
     try:
         ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,  # (hapus baris ini untuk fungsi download_video)
+            "username": "oauth2",  # <--- TRIGGER OAUTH
+            "password": "",  # Kosongkan
+            "quiet": False,  # Matikan quiet agar logs muncul
+            "no_warnings": False,
+            "logger": MyLogger(),  # Attach logger custom
+            # Cache harus di /tmp agar bisa ditulis oleh Cloud Run
+            "cachedir": os.path.join(tempfile.gettempdir(), "yt-dlp-cache"),
             "socket_timeout": 30,
             "nocheckcertificate": True,
             "noplaylist": True,
-            "cachedir": False,
-            # Biarkan yt-dlp memilih user agent terbaik
         }
-
-        # Check if cookies exist before using them
-        if COOKIES_FILE and os.path.exists(COOKIES_FILE):
-            print(f"✅ Using cookies: {COOKIES_FILE}")
-            ydl_opts["cookiefile"] = COOKIES_FILE
-        else:
-            print(f"⚠️ Cookies not available, trying without authentication")
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
 
         # Ambil thumbnail resolusi tertinggi
         thumbnail_url = info.get("thumbnail", "")
