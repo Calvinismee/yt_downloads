@@ -17,6 +17,7 @@ OUTPUT_DIR = tempfile.gettempdir()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
 
+
 # Function to fetch secret from Cloud Secret Manager
 def get_secret(secret_id, version_id="latest"):
     """Fetch secret from Google Cloud Secret Manager"""
@@ -24,7 +25,7 @@ def get_secret(secret_id, version_id="latest"):
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project_id:
             return None
-        
+
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
         response = client.access_secret_version(request={"name": name})
@@ -33,72 +34,78 @@ def get_secret(secret_id, version_id="latest"):
         print(f"❌ Error fetching secret: {e}")
         return None
 
+
 # Load cookies on startup
 def load_cookies():
     """Load cookies from file or environment variable"""
     print(f"📍 BASE_DIR: {BASE_DIR}")
     print(f"📍 COOKIES_FILE path: {COOKIES_FILE}")
-    
+
     # First try local file (for local development)
     if os.path.exists(COOKIES_FILE):
         print(f"✅ Using local cookies file: {COOKIES_FILE}")
-        with open(COOKIES_FILE, 'r') as f:
+        with open(COOKIES_FILE, "r") as f:
             content = f.read()
         print(f"✅ Cookies file size: {len(content)} bytes")
         return COOKIES_FILE
-    
+
     # Try to get from environment variable (Cloud Run)
     cookies_data = os.environ.get("cookies")
     print(f"📍 Cookies env var: {'Set' if cookies_data else 'Not set'}")
-    
+
     if cookies_data:
         try:
             with open(COOKIES_FILE, "w") as f:
                 f.write(cookies_data)
-            print(f"✅ Cookies loaded from environment variable ({len(cookies_data)} bytes)")
+            print(
+                f"✅ Cookies loaded from environment variable ({len(cookies_data)} bytes)"
+            )
             return COOKIES_FILE
         except Exception as e:
             print(f"❌ Error saving cookies: {e}")
             return COOKIES_FILE
-    
+
     print("⚠️ No cookies found")
     return COOKIES_FILE
+
 
 COOKIES_FILE = load_cookies()
 print(f"\n🚀 SERVER STARTUP - Cookies file path: {COOKIES_FILE}\n")
 
+
 @app.route("/", methods=["GET"])
 def home():
     """Halaman depan untuk cek status server"""
-    return jsonify({
-        "status": "online",
-        "message": "Server YouTube Downloader Berjalan! 🚀",
-        "backend": "Flask + yt-dlp",
-        "version": "1.0.0"
-    })
+    return jsonify(
+        {
+            "status": "online",
+            "message": "Server YouTube Downloader Berjalan! 🚀",
+            "backend": "Flask + yt-dlp",
+            "version": "1.0.0",
+        }
+    )
+
 
 @app.route("/video-info", methods=["GET"])
 def get_video_info():
     """Mendapatkan metadata video (judul, thumbnail) tanpa download"""
     video_id = request.args.get("video_id")
-    
+
     if not video_id:
         return jsonify(success=False, error="Missing video ID"), 400
-    
+
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+
     try:
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "skip_download": True, # Hanya ambil info
-            "socket_timeout": 15,
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            },
+            "skip_download": True,  # (hapus baris ini untuk fungsi download_video)
+            "socket_timeout": 30,
             "nocheckcertificate": True,
             "noplaylist": True,
-            "cachedir": False, # Disable cache to avoid permission/stale issues
+            "cachedir": False,
+            # Biarkan yt-dlp memilih user agent terbaik
         }
 
         # Check if cookies exist before using them
@@ -107,26 +114,29 @@ def get_video_info():
             ydl_opts["cookiefile"] = COOKIES_FILE
         else:
             print(f"⚠️ Cookies not available, trying without authentication")
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
+
         # Ambil thumbnail resolusi tertinggi
         thumbnail_url = info.get("thumbnail", "")
         if info.get("thumbnails"):
-            thumbnail_url = max(info["thumbnails"], key=lambda x: x.get("height", 0))["url"]
-        
+            thumbnail_url = max(info["thumbnails"], key=lambda x: x.get("height", 0))[
+                "url"
+            ]
+
         return jsonify(
             success=True,
             title=info.get("title", "Unknown"),
             duration=info.get("duration", 0),
             thumbnail=thumbnail_url,
-            author=info.get("uploader", "Unknown")
+            author=info.get("uploader", "Unknown"),
         )
-    
+
     except Exception as e:
         print(f"Error fetching info: {e}")
         return jsonify(success=False, error=str(e)), 400
+
 
 @app.route("/download", methods=["POST"])
 def download_video():
@@ -142,17 +152,19 @@ def download_video():
         return jsonify(success=False, error="Missing video ID"), 400
 
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+
     # Bersihkan nama file dari karakter aneh
-    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+    safe_title = "".join(
+        c for c in title if c.isalnum() or c in (" ", "-", "_")
+    ).strip()
     if not safe_title:
         safe_title = "video_download"
-    
+
     # Template nama file sementara di folder /tmp
     # %(ext)s akan otomatis diganti oleh yt-dlp (mp4/mp3/webm)
     temp_filename_template = f"{safe_title}_{int(time.time())}.%(ext)s"
     temp_filepath = os.path.join(OUTPUT_DIR, temp_filename_template)
-    
+
     try:
         ydl_opts = {
             "outtmpl": temp_filepath,
@@ -176,14 +188,18 @@ def download_video():
 
         # Konfigurasi spesifik MP3 vs MP4
         if format_type == "mp3":
-            ydl_opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": str(audio_quality),
-                }],
-            })
+            ydl_opts.update(
+                {
+                    "format": "bestaudio/best",
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "mp3",
+                            "preferredquality": str(audio_quality),
+                        }
+                    ],
+                }
+            )
         else:
             # Format string untuk kualitas video
             if video_quality == "720":
@@ -192,30 +208,32 @@ def download_video():
                 format_str = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
             elif video_quality == "360":
                 format_str = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
-            else: # Best available (1080p+)
+            else:  # Best available (1080p+)
                 format_str = "bestvideo+bestaudio/best"
-            
-            ydl_opts.update({
-                "format": format_str,
-                "merge_output_format": "mp4", # Force jadi MP4
-            })
+
+            ydl_opts.update(
+                {
+                    "format": format_str,
+                    "merge_output_format": "mp4",  # Force jadi MP4
+                }
+            )
 
         print(f"Starting download: {video_id} [{format_type}]")
-        
+
         # Eksekusi Download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        
+
         # Cari file hasil download (karena ekstensi bisa berubah-ubah)
         # Kita cari file yang namanya diawali dengan safe_title dan timestamp tadi
         search_prefix = f"{safe_title}_{int(time.time())}"
         found_file = None
-        
+
         for file in os.listdir(OUTPUT_DIR):
             if file.startswith(search_prefix):
                 found_file = os.path.join(OUTPUT_DIR, file)
                 break
-        
+
         if not found_file or not os.path.exists(found_file):
             return jsonify(success=False, error="File not found after processing"), 500
 
@@ -226,7 +244,7 @@ def download_video():
             try:
                 with open(found_file, "rb") as f:
                     while True:
-                        chunk = f.read(4096) # Baca 4KB per chunk
+                        chunk = f.read(4096)  # Baca 4KB per chunk
                         if not chunk:
                             break
                         yield chunk
@@ -240,7 +258,7 @@ def download_video():
 
         # Tentukan nama file akhir untuk user
         final_filename = f"{safe_title}.{format_type}"
-        mimetype = 'audio/mpeg' if format_type == 'mp3' else 'video/mp4'
+        mimetype = "audio/mpeg" if format_type == "mp3" else "video/mp4"
 
         return Response(
             generate_file_stream(),
@@ -248,14 +266,16 @@ def download_video():
             headers={
                 "Content-Disposition": f'attachment; filename="{final_filename}"',
                 # "Content-Length": os.path.getsize(found_file) # Opsional, kadang bikin streaming putus di browser tertentu
-            }
+            },
         )
 
     except Exception as e:
         print(f"Download Error: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return jsonify(success=False, error=str(e)), 500
+
 
 if __name__ == "__main__":
     # Konfigurasi Port untuk Cloud Run
