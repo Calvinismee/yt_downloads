@@ -126,13 +126,25 @@ def get_video_info():
     try:
         # Cek ulang cookies siapa tau baru ada update/terhapus dari cache
         cookie_path = get_valid_cookies_path()
-        
+        # Update ydl_opts dengan trik "Android Client"
         ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
+            "quiet": False,
+            "no_warnings": False,
             "cookiefile": cookie_path,
-            "cachedir": False, 
             "socket_timeout": 30,
+            
+            # [TRIK JITU] Memaksa yt-dlp berpura-pura jadi HP Android / TV
+            # Ini seringkali membypass cek "Sign in to confirm you're not a bot"
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios", "web"],
+                    "player_skip": ["webpage", "configs", "js"],
+                    "include_ssl_logs": [False] 
+                }
+            },
+            
+            # Hapus cache user agent, gunakan yang dibuat yt-dlp
+            "cachedir": False,
             "nocheckcertificate": True,
             "noplaylist": True,
         }
@@ -196,12 +208,25 @@ def download_video():
         # --- KONFIGURASI YT-DLP ---
         cookie_path = get_valid_cookies_path()
         
+     # Update ydl_opts dengan trik "Android Client"
         ydl_opts = {
-            "outtmpl": temp_filepath_template,
-            "quiet": False,  # False agar log terlihat di Cloud Logging
+            "quiet": False,
             "no_warnings": False,
-            "socket_timeout": 60,
             "cookiefile": cookie_path,
+            "socket_timeout": 30,
+            
+            # [TRIK JITU] Memaksa yt-dlp berpura-pura jadi HP Android / TV
+            # Ini seringkali membypass cek "Sign in to confirm you're not a bot"
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios", "web"],
+                    "player_skip": ["webpage", "configs", "js"],
+                    "include_ssl_logs": [False] 
+                }
+            },
+            
+            # Hapus cache user agent, gunakan yang dibuat yt-dlp
+            "cachedir": False,
             "nocheckcertificate": True,
             "noplaylist": True,
         }
