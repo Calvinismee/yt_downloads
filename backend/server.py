@@ -230,7 +230,7 @@ def download_video():
             "nocheckcertificate": True,
             "noplaylist": True,
         }
-
+        
         if format_type == "mp3":
             ydl_opts.update({
                 "format": "bestaudio/best",
