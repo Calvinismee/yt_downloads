@@ -11,25 +11,70 @@ app = Flask(__name__)
 CORS(app)
 
 # --- KONFIGURASI PATH ---
-# [FIX] Gunakan /tmp untuk cookies karena folder app biasanya Read-Only di Cloud Run
-OUTPUT_DIR = tempfile.gettempdir()
-COOKIES_FILE = os.path.join(OUTPUT_DIR, "cookies.txt")
 
+# --- DEFINISI PATH (TARUH SETELAH IMPORT) ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = tempfile.gettempdir()
+
+
+# Lokasi file di folder temp (untuk Cloud Run / Secret Manager)
+TEMP_COOKIES_PATH = os.path.join(OUTPUT_DIR, "cookies.txt")
+
+# Nama file di folder project (Prioritas 1 - Local Development)
+LOCAL_COOKIES_PATH = os.path.join(BASE_DIR, "cookies.txt")
+
+SECRET_ID = "cookie"
+
+def get_valid_cookies_path():
+    """Logika pintar memilih cookies: Lokal -> Cache -> Secret Manager"""
+    
+    # 1. Cek Lokal (Prioritas Dev di Laptop)
+    if os.path.exists(LOCAL_COOKIES_PATH) and os.path.getsize(LOCAL_COOKIES_PATH) > 0:
+        print(f"🍪 [AUTH] Memakai Cookies LOKAL: {LOCAL_COOKIES_PATH}")
+        return LOCAL_COOKIES_PATH
+
+    # 2. Cek Cache di /tmp (Supaya gak panggil Secret Manager terus-terusan)
+    if os.path.exists(TEMP_COOKIES_PATH) and os.path.getsize(TEMP_COOKIES_PATH) > 0:
+        print(f"🍪 [AUTH] Memakai Cookies CACHE: {TEMP_COOKIES_PATH}")
+        return TEMP_COOKIES_PATH
+
+    # 3. Ambil dari Secret Manager (Khusus Cloud Run)
+    print("🔄 [AUTH] Cookies tidak ada. Mengambil dari Secret Manager...")
+    secret_data = get_secret(SECRET_ID)
+    
+    if secret_data:
+        try:
+            # Tulis ke /tmp agar bisa dibaca yt-dlp
+            with open(TEMP_COOKIES_PATH, "w") as f:
+                f.write(secret_data)
+            print(f"✅ [AUTH] Cookies sukses didownload ke: {TEMP_COOKIES_PATH}")
+            return TEMP_COOKIES_PATH
+        except Exception as e:
+            print(f"❌ Error menulis file cookies: {e}")
+            return None
+    
+    print("⚠️ [AUTH] Gagal memuat Cookies. Download mungkin akan error 429/Sign-in.")
+    return None
+
+# Simpan path cookies yang ketemu ke variabel global
+CURRENT_COOKIES_FILE = get_valid_cookies_path()
 
 # Function to fetch secret from Cloud Secret Manager
-def get_secret(secret_id, version_id="latest"):
+def get_secret(secret_name):
+    """Mengambil data dari Google Secret Manager"""
     try:
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project_id:
-            print("⚠️ GOOGLE_CLOUD_PROJECT not set. Skipping Secret Manager.")
+            print("⚠️ GOOGLE_CLOUD_PROJECT variable not set.")
             return None
-
+            
         client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+        # Format path secret: projects/{id}/secrets/{name}/versions/latest
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
-        print(f"❌ Error fetching secret: {e}")
+        print(f"❌ Gagal ambil Secret: {e}")
         return None
 
 
@@ -65,6 +110,7 @@ def setup_cookies():
     else:
         print("⚠️ No cookies found. App will try to run without auth.")
         COOKIES_FILE = None
+
 
 # Jalankan setup cookies saat aplikasi start
 setup_cookies()
@@ -126,40 +172,55 @@ def get_video_info():
 
 @app.route("/download", methods=["POST"])
 def download_video():
-    data = request.get_json()
-    video_id = data.get("video_id")
-    title = data.get("title", "video")
-    format_type = data.get("format", "mp4").lower()
-    video_quality = data.get("video_quality", "720")
-    audio_quality = data.get("audio_quality", "128")
-
-    if not video_id:
-        return jsonify(success=False, error="Missing video ID"), 400
-
-    url = f"https://www.youtube.com/watch?v={video_id}"
-
-    safe_title = (
-        "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
-        or "video"
-    )
-    temp_filename_template = f"{safe_title}_{int(time.time())}.%(ext)s"
-    temp_filepath = os.path.join(OUTPUT_DIR, temp_filename_template)
-
+    print("\n--- 🟢 REQUEST DOWNLOAD MASUK ---")
     try:
+        data = request.get_json()
+        video_id = data.get("video_id")
+        title = data.get("title", "video")
+        format_type = data.get("format", "mp4").lower()
+
+        if not video_id:
+            return jsonify(success=False, error="Missing video ID"), 400
+
+        # Setup Path
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        epoch_time = int(time.time())
+        safe_title = (
+            "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+            or "video"
+        )
+        filename_base = f"{safe_title}_{video_id}_{epoch_time}"
+        temp_filepath_template = os.path.join(OUTPUT_DIR, f"{filename_base}.%(ext)s")
+
+        print(f"📍 Target Folder: {OUTPUT_DIR}")
+        print(f"📍 Filename Base: {filename_base}")
+
+        # Cek FFmpeg (Khusus Windows Local)
+        # Jika dijalankan lokal dan ffmpeg.exe ada di folder yang sama, tambahkan ke PATH sementara
+        local_ffmpeg = os.path.join(BASE_DIR, "ffmpeg.exe")
+        if os.path.exists(local_ffmpeg):
+            print(f"✅ FFmpeg lokal terdeteksi di: {local_ffmpeg}")
+            os.environ["PATH"] += os.pathsep + BASE_DIR
+        else:
+            print(
+                "⚠️ FFmpeg lokal tidak ditemukan di sebelah server.py (Semoga sudah ada di System PATH)"
+            )
+
+        cookie_path = get_valid_cookies_path()
         ydl_opts = {
-            "outtmpl": temp_filepath,
-            "quiet": True,
-            "no_warnings": True,
+            "outtmpl": temp_filepath_template,
+            "quiet": False,  # Biarkan False biar errornya kelihatan
+            "no_warnings": False,
             "socket_timeout": 60,
-            # [FIX] HAPUS 'cookies_from_browser'
-            # [FIX] HAPUS 'User-Agent' manual (http_headers)
-            "cookiefile": COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+            # [PENTING] Ini kuncinya:
+            "cookiefile": cookie_path,
+            # Hapus user agent manual, biarkan yt-dlp yang atur
+            # "http_headers": { ... },  <-- JANGAN DIPAKAI
             "nocheckcertificate": True,
             "noplaylist": True,
-            "cachedir": False,
         }
 
-        # Logika Kualitas (MP3/MP4) tetap sama
+        # Konfigurasi Format
         if format_type == "mp3":
             ydl_opts.update(
                 {
@@ -168,50 +229,56 @@ def download_video():
                         {
                             "key": "FFmpegExtractAudio",
                             "preferredcodec": "mp3",
-                            "preferredquality": str(audio_quality),
                         }
                     ],
                 }
             )
         else:
-            if video_quality == "720":
-                format_str = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-            elif video_quality == "480":
-                format_str = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-            elif video_quality == "360":
-                format_str = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
-            else:
-                format_str = "bestvideo+bestaudio/best"
-
             ydl_opts.update(
                 {
-                    "format": format_str,
+                    "format": "bestvideo+bestaudio/best",  # Format paling aman
                     "merge_output_format": "mp4",
                 }
             )
 
-        print(
-            f"Starting download: {video_id} using cookies: {os.path.exists(COOKIES_FILE)}"
-        )
+        print(f"⏳ Sedang mendownload: {video_id}...")
 
+        # PROSES DOWNLOAD
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # Cari file hasil download
-        search_prefix = f"{safe_title}_{int(time.time())}"
+        print("✅ Download yt-dlp selesai. Mencari file hasil...")
+
+        # CARI FILE HASIL
         found_file = None
-        for file in os.listdir(OUTPUT_DIR):
-            if file.startswith(search_prefix):
+        files_in_dir = os.listdir(OUTPUT_DIR)  # List semua file buat debug
+
+        for file in files_in_dir:
+            if file.startswith(filename_base):
                 found_file = os.path.join(OUTPUT_DIR, file)
                 break
 
         if not found_file:
-            return jsonify(success=False, error="File not found"), 500
+            print("❌ FILE TIDAK KETEMU!")
+            print(f"   Dicari prefix: {filename_base}")
+            print(f"   Isi folder {OUTPUT_DIR} (5 file pertama): {files_in_dir[:5]}")
+            return (
+                jsonify(
+                    success=False,
+                    error="File tidak ditemukan setelah download (Cek FFmpeg)",
+                ),
+                500,
+            )
 
-        # Streaming Generator
-        def generate_file_stream():
+        print(f"✅ File ditemukan: {found_file}")
+
+        # STREAMING RESPONSE
+        final_filename = f"{safe_title}.{format_type}"
+        mimetype = "audio/mpeg" if format_type == "mp3" else "video/mp4"
+
+        def generate_file_stream(file_path):
             try:
-                with open(found_file, "rb") as f:
+                with open(file_path, "rb") as f:
                     while True:
                         chunk = f.read(4096)
                         if not chunk:
@@ -219,23 +286,25 @@ def download_video():
                         yield chunk
             finally:
                 try:
-                    os.remove(found_file)
-                    print(f"Deleted: {found_file}")
+                    os.remove(file_path)
+                    print(f"🧹 File dihapus: {file_path}")
                 except:
                     pass
 
-        final_filename = f"{safe_title}.{format_type}"
-        mimetype = "audio/mpeg" if format_type == "mp3" else "video/mp4"
-
         return Response(
-            generate_file_stream(),
+            generate_file_stream(found_file),
             mimetype=mimetype,
             headers={"Content-Disposition": f'attachment; filename="{final_filename}"'},
         )
 
     except Exception as e:
-        print(f"Download Error: {e}")
-        return jsonify(success=False, error=str(e)), 500
+        print(f"\n❌ ERROR FATAL DI PYTHON:\n{str(e)}")
+        import traceback
+
+        traceback.print_exc()  # Print error lengkap merah-merah di terminal
+
+        # Kirim pesan error asli ke Frontend biar tau salahnya apa
+        return jsonify(success=False, error=f"Server Error: {str(e)}"), 500
 
 
 if __name__ == "__main__":
