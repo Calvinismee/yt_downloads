@@ -1,0 +1,11 @@
+# Abaikan folder environment lokal & git
+.venv/
+.git/
+__pycache__/
+*.pyc
+
+# Abaikan cookies lokal (Agar memaksa server pakai Secret Manager)
+cookies.txt
+
+# Abaikan file system lain
+.DS_Store
