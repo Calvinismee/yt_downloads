@@ -35,20 +35,17 @@ SECRET_ID = "cookie"  # <-- Pastikan nama secret di GCP adalah 'cookie' atau 'yo
 # ==========================================
 
 def get_secret(secret_name):
-    """Mengambil data dari Google Secret Manager"""
     try:
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if not project_id:
-            # Jika running lokal tanpa env var project, skip secret manager
-            return None
-            
+        # PENTING: Tulis ID project secara manual agar tidak salah alamat
+        project_id = "ytdownload-480614"  
+        
         client = secretmanager.SecretManagerServiceClient()
-        # Format path: projects/{id}/secrets/{name}/versions/latest
         name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        
         response = client.access_secret_version(request={"name": name})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
-        print(f"❌ Gagal ambil Secret '{secret_name}': {e}")
+        print(f"❌ Gagal ambil Secret: {e}")
         return None
 
 def get_valid_cookies_path():
